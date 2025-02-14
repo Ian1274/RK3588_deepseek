@@ -1,130 +1,206 @@
-# Description
+# **RK3588/RK3576 深度学习模型部署指南**  
 
-  RKLLM software stack can help users to quickly deploy AI models to Rockchip chips. The overall framework is as follows:
-    <center class="half">
-        <div style="background-color:#ffffff;">
-        <img src="res/framework.jpg" title="RKLLM"/>
-    </center>
+本指南适用于 **Ubuntu Linux 环境**，目标是在 **RK3588 或 RK3576** 开发板上完成 **RKLLM 模型转换与部署**。  
 
-  In order to use RKNPU, users need to first run the RKLLM-Toolkit tool on the computer, convert the trained model into an RKLLM format model, and then inference on the development board using the RKLLM C API.
+参考文档：https://github.com/airockchip/rknn-llm
 
-- RKLLM-Toolkit is a software development kit for users to perform model conversionand quantization on PC.
+相关文件链接：: https://pan.baidu.com/s/108km7K3EHSrqBjwKq-UcTQ?pwd=6tzt 
 
-- RKLLM Runtime provides C/C++ programming interfaces for Rockchip NPU platform to help users deploy RKLLM models and accelerate the implementation of LLM applications.
+（转换后的deepseek模型、升级npu驱动后的镜像）
 
-- RKNPU kernel driver is responsible for interacting with NPU hardware. It has been open source and can be found in the Rockchip kernel code.
+## **1. 环境准备**
 
-# Support Platform
+### **1.1 硬件要求**
 
-- RK3588 Series
-- RK3576 Series
+- **RK3588 / RK3576 开发板**
+- **Ubuntu Linux 20.04 或更高**
+- 至少 **16GB RAM** 和 **50GB 磁盘空间**
 
-# Support Models
+### **1.2 安装 Miniforge3（管理 Python 环境）**
 
-- [x] [LLAMA models](https://huggingface.co/meta-llama) 
-- [x] [TinyLLAMA models](https://huggingface.co/TinyLlama) 
-- [x] [Qwen models](https://huggingface.co/models?search=Qwen/Qwen)
-- [x] [Phi models](https://huggingface.co/models?search=microsoft/phi)
-- [x] [ChatGLM3-6B](https://huggingface.co/THUDM/chatglm3-6b/tree/103caa40027ebfd8450289ca2f278eac4ff26405)
-- [x] [Gemma models](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315)
-- [x] [InternLM2 models](https://huggingface.co/collections/internlm/internlm2-65b0ce04970888799707893c)
-- [x] [MiniCPM models](https://huggingface.co/collections/openbmb/minicpm-65d48bf958302b9fd25b698f)
-- [x] [TeleChat models](https://huggingface.co/Tele-AI)
-- [x] [Qwen2-VL](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct)
-- [x] [MiniCPM-V](https://huggingface.co/openbmb/MiniCPM-V-2_6)
-- [x] [DeepSeek-R1-Distill](https://huggingface.co/collections/deepseek-ai/deepseek-r1-678e1e131c0169c0bc89728d)
+1. **检查 Conda 是否安装**
 
-# Model Performance Benchmark
+   ```bash
+   conda -V
+   ```
 
-| llm model      | dtype      | seqlen | max_context | new_tokens | TTFT(ms) | Tokens/s | memory(G) | platform |
-| :------------- | :--------- | :----: | :---------: | :--------: | :------: | :------: | :-------: | :------: |
-| TinyLLAMA-1.1B | w4a16      |   64   |     320     |    256     |  345.00  |  21.10   |   0.77    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     |  410.00  |  18.50   |    0.8    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     |  140.46  |  24.21   |   1.25    |  RK3588  |
-|                | w8a8_g512  |   64   |     320     |    256     |  195.00  |  20.08   |   1.29    |  RK3588  |
-| Qwen2-1.5B     | w4a16      |   64   |     320     |    256     |  512.00  |  14.40   |   1.75    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     |  550.00  |  12.75   |   1.76    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     |  206.00  |  16.46   |   2.47    |  RK3588  |
-|                | w8a8_g128  |   64   |     320     |    256     |  725.00  |   7.00   |   2.65    |  RK3588  |
-| Phi-3-3.8B     | w4a16      |   64   |     320     |    256     |  975.00  |   6.60   |   2.16    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     | 1180.00  |   5.85   |   2.23    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     |  516.00  |   7.44   |   3.88    |  RK3588  |
-|                | w8a8_g512  |   64   |     320     |    256     |  610.00  |   6.13   |   3.95    |  RK3588  |
-| ChatGLM3-6B    | w4a16      |   64   |     320     |    256     | 1168.00  |   4.62   |   3.86    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     | 1582.56  |   3.82   |   3.96    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     |  800.00  |   4.95   |   6.69    |  RK3588  |
-|                | w8a8_g128  |   64   |     320     |    256     | 2190.00  |   2.70   |   7.18    |  RK3588  |
-| Gemma2-2B      | w4a16      |   64   |     320     |    256     |  628.00  |   8.00   |   3.63    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     |  776.20  |   7.40   |   3.63    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     |  342.29  |   9.67   |   4.84    |  RK3588  |
-|                | w8a8_g128  |   64   |     320     |    256     | 1055.00  |   5.49   |   5.14    |  RK3588  |
-| InternLM2-1.8B | w4a16      |   64   |     320     |    256     |  475.00  |  13.30   |   1.59    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     |  572.00  |  11.95   |   1.62    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     |  205.97  |  15.66   |   2.38    |  RK3588  |
-|                | w8a8_g512  |   64   |     320     |    256     |  298.00  |  12.66   |   2.45    |  RK3588  |
-| MiniCPM3-4B    | w4a16      |   64   |     320     |    256     | 1397.00  |   4.80   |    2.7    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     | 1645.00  |   4.39   |    2.8    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     |  702.18  |   6.15   |   4.65    |  RK3588  |
-|                | w8a8_g128  |   64   |     320     |    256     | 1691.00  |   3.42   |   5.06    |  RK3588  |
-| llama3-8B      | w4a16      |   64   |     320     |    256     | 1607.98  |   3.60   |   5.63    |  RK3576  |
-|                | w4a16_g128 |   64   |     320     |    256     | 2010.00  |   3.00   |   5.76    |  RK3576  |
-|                | w8a8       |   64   |     320     |    256     | 1128.00  |   3.79   |   9.21    |  RK3588  |
-|                | w8a8_g512  |   64   |     320     |    256     | 1281.35  |   3.05   |   9.45    |  RK3588  |
+   若未安装，则执行以下命令：
 
-| multimodal model | image input size | vision model dtype | vision infer time(s) | vision memory(MB) | llm model dtype | seqlen | max_context | new_tokens | TTFT(ms) | Tokens/s | llm memory(G) | platform |
-|:-------------- |:---------- |:------:|:-----------:|:----------:|:--------:|:--------:|:---------:|:--------:|:---------:|:---------:|:---------:|:---------:|
-| Qwen2-VL-2B | (1, 3, 392, 392) | fp16 | 3.55 | 1436.52 | w4a16 | 256 | 384 | 128 | 2094.17 | 13.23 | 1.75 | RK3576 |
-|                              |    | fp16  | 3.28 | 1436.52 | w8a8 | 256 | 384 | 128 | 856.86 | 16.19 | 2.47 | RK3588 |
-| MiniCPM-V-2_6 | (1, 3, 448, 448) | fp16 | 2.40 | 1031.30 | w4a16 | 128 | 256 | 128 | 2997.70 | 3.84 | 5.50 | RK3576 |
-|                            |    | fp16  | 3.27 | 976.98 | w8a8 | 128 | 256 | 128 | 1720.60 | 4.13 | 8.88 | RK3588 |
+2. **下载并安装 Miniforge3**
 
-- This performance data were collected based on the maximum CPU and NPU frequencies of each platform with version 1.1.0. 
-- The script for setting the frequencies is located in the scripts directory.
-- The vision model were tested based on all NPU core with rknn-toolkit2 version 2.2.0.
+   ```bash
+   wget -c https://mirrors.bfsu.edu.cn/github-release/conda-forge/miniforge/LatestRelease/Miniforge3-Linux-x86_64.sh
+   bash Miniforge3-Linux-x86_64.sh
+   ```
 
-# Download
+### **1.3 创建 RKLLM-Toolkit Conda 环境**
 
-1. You can download the **latest package** from [RKLLM_SDK](https://console.zbox.filez.com/l/RJJDmB), fetch code: rkllm
-2. You can download the **converted rkllm model**  from [rkllm_model_zoo](https://console.box.lenovo.com/l/l0tXb8), fetch code: rkllm
+```bash
+source ~/miniforge3/bin/activate
+conda create -n RKLLM-Toolkit python=3.8 -y
+conda activate RKLLM-Toolkit
+```
 
-# Examples
+### **1.4 安装 RKLLM-Toolkit**
 
-1. Multimodel deployment demo:   [Qwen2-VL-2B_Demo](https://github.com/airockchip/rknn-llm/tree/main/examples/Qwen2-VL-2B_Demo)
-2. API usage demo:  [DeepSeek-R1-Distill-Qwen-1.5B_Demo](https://github.com/airockchip/rknn-llm/tree/main/examples/DeepSeek-R1-Distill-Qwen-1.5B_Demo)
-3. API server demo:  [rkllm_server_demo](https://github.com/airockchip/rknn-llm/tree/main/examples/rkllm_server_demo)
+```bash
+pip install rkllm_toolkit-x.x.x-cp38-cp38-linux_x86_64.whl
+```
 
-# Note
+### **1.5 验证安装**
 
-- The modifications in version 1.1 are significant, making it incompatible with older version models. Please use the latest toolchain for model conversion and inference.
+```python
+python -c "from rkllm.api import RKLLM"
+```
 
-- The supported Python versions are:
-  
-  - Python 3.8
-  
-  - Python 3.10
+无错误信息即安装成功。
 
-- Latest version: [ <u>v1.1.4](https://github.com/airockchip/rknn-llm/releases/tag/release-v1.1.4)</u>
+---
 
-# RKNN Toolkit2
+## **2. 模型转换**
 
-If you want to deploy additional AI model, we have introduced a SDK called RKNN-Toolkit2. For details, please refer to:
+### **2.1 下载 rknn-llm**
 
-https://github.com/airockchip/rknn-toolkit2
+```bash
+git clone https://github.com/airockchip/rknn-llm.git
+cd rknn-llm/examples/DeepSeek-R1-Distill-Qwen-1.5B_Demo/export
+```
 
-# CHANGELOG
+### **2.2 下载模型**
 
-## v1.1.0
+```bash
+pip install modelscope
+modelscope download --model deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B --local_dir ./
+```
 
-- Support group-wise quantization (w4a16 group sizes of 32/64/128, w8a8 group sizes of 128/256/512).
-- Support joint inference with LoRA model loading
-- Support storage and preloading of prompt cache.
-- Support gguf model conversion (currently only support q4_0 and fp16).
-- Optimize initialization, prefill, and decode time.
-- Support four input types: prompt, embedding, token, and multimodal.
-- Add PC-based simulation accuracy testing and inference interface support for rkllm-toolkit.
-- Add gdq algorithm to improve 4-bit quantization accuracy.
-- Add mixed quantization algorithm, supporting a combination of grouped and non-grouped quantization based on specified ratios.
-- Add support for models such as Llama3, Gemma2, and MiniCPM3.
-- Resolve catastrophic forgetting issue when the number of tokens exceeds max_context.
+### **2.3 修改模型路径**
 
-for older version, please refer [CHANGELOG](CHANGELOG.md)
+编辑 `export_rkllm.py`：
+
+```python
+modelpath = './DeepSeek-R1-Distill-Qwen-1.5B'
+```
+
+### **2.4 执行模型转换**
+
+```bash
+python export_rkllm.py
+```
+
+**输出文件：** `DeepSeek-R1-Distill-Qwen-1.5B_W8A8_RK3588.rkllm`
+
+---
+
+## **3. 更新芯片 NPU 内核**
+
+### **3.1 检查 NPU 版本**
+
+```bash
+cat /sys/kernel/debug/rknpu/version
+```
+
+若 **版本低于 v0.9.8**，请升级：
+
+### **3.2 下载并更新驱动**
+
+```bash
+wget https://github.com/airockchip/rknn-llm/tree/main/rknpu-driver/rknpu_driver_0.9.8_20241009.tar.z2
+tar -xvf rknpu_driver_0.9.8_20241009.tar.z2 -C /path/to/RK3588_Android12_Sdk/kernel-5.10/driver/rknpu
+```
+
+### **3.3 重新编译内核**
+
+```bash
+cd RK3588_Android12_Sdk
+source build/envsetup.sh && lunch rk3588m_car-userdebug && ./build.sh -AUCKuBop
+```
+
+编译后生成 **update.img**，用于系统烧录。
+
+### **3.4 烧录新系统**
+
+请使用 **官方烧录工具** 烧录 **update.img** 至 RK3588。
+
+---
+
+## **4. 编译 RKLLM Runtime（Android 端）**
+
+### **4.1 下载 Android NDK**
+
+```bash
+cd rknn-llm/examples/DeepSeek-R1-Distill-Qwen-1.5B_Demo/deploy
+wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+unzip android-ndk-r21e-linux-x86_64.zip
+```
+
+### **4.2 配置 NDK 路径**
+
+```bash
+vim build-android.sh
+```
+
+修改：
+
+```bash
+ANDROID_NDK_PATH=~/android-ndk-r21e
+```
+
+### **4.3 编译**
+
+```bash
+./build-android.sh
+```
+
+### **4.4 复制 libomp.so**
+
+```bash
+cp ~/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/lib64/clang/9.0.9/lib/linux/aarch64/libomp.so install/demo_Android_arm64-v8a/lib/
+```
+
+### **4.5 打包**
+
+```bash
+tar -zcvf install/demo_Android_arm64-v8a.tar.gz install/demo_Android_arm64-v8a/
+```
+
+---
+
+## **5. 在 RK3588 端运行 Demo**
+
+### **5.1 传输文件**
+
+```bash
+adb push ~/rknn-llm/examples/DeepSeek-R1-Distill-Qwen-1.5B_Demo/export/DeepSeek-R1-Distill-Qwen-1.5B_W8A8_RK3588.rkllm /data/
+adb push ~/rknn-llm/examples/DeepSeek-R1-Distill-Qwen-1.5B_Demo/deploy/install/demo_Android_arm64-v8a.tar.gz /data/
+```
+
+### **5.2 解压与运行**
+
+```bash
+adb shell
+cd /data
+tar -zxvf demo_Android_arm64-v8a.tar.gz
+cd install/demo_Android_arm64-v8a
+export LD_LIBRARY_PATH=./lib
+taskset f0 ./llm_demo /data/deepseek-r1.rkllm 2048 4096
+```
+
+### **5.3 运行结果**
+
+```bash
+rkllm init start
+rkllm init success
+```
+
+模型成功运行！
+
+---
+
+## **6. 总结**
+
+- **已完成：** 环境搭建、模型转换、NPU 更新、Android Runtime 编译、RK3588 端 Demo 运行。
+- **优化：** 通过 **简化命令、减少重复、增加自动化脚本** 提升用户体验。
+- **下一步：** 进一步优化 **量化参数**，提升模型运行效率。
+
+---
+
